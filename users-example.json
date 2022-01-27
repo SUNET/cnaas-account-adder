@@ -1,0 +1,9 @@
+{
+    "example-group": [
+        {
+            "first_name": "Example",
+            "last_name":  "User",
+            "eppn":       "user@example.com"
+        }
+    ]
+}

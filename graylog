@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+
+let cp = require("child_process");
+let fs = require("fs");
+
+let http = require("http");
+if (process.argv[3].startsWith("https"))
+    http = require("https");
+
+function usage() {
+    console.log(`Usage: graylog get <url>
+       graylog post <url> <group>...`);
+}
+
+// Passwords are not used for the web UI which is behind SSO, but can be used
+// for the API, so it is important that they aren't guessable.
+function pw() {
+    return cp.execSync("pwgen -s 32 1").toString().trim();
+}
+
+function get() {
+    let req = http.request(
+        process.argv[3] + "/api/users",
+        {
+            auth: `${process.env.TOKEN}:token`
+        },
+        res => {
+            data = "";
+            res.on("data", chunk => (data += chunk));
+            res.on("end", () => console.log(data));
+        }
+    );
+    req.end();
+}
+
+function post() {
+    let users = JSON.parse(fs.readFileSync("users.json"));
+
+    for (let group of process.argv.slice(4)) {
+        for (let user of users[group]) {
+            let body = JSON.stringify({
+                password: pw(),
+                permissions: [],
+                roles: ["reader", "admin"],
+                last_name: user.last_name,
+                first_name: user.first_name,
+                email: user.eppn,
+                username: user.eppn
+            });
+
+            let req = http.request(
+                process.argv[3] + "/api/users",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Content-Length": Buffer.byteLength(body),
+                        "X-Requested-By": "cnaas-account-adder"
+                    },
+                    auth: `${process.env.TOKEN}:token`
+                },
+                res => {
+                    data = "";
+                    res.on("data", chunk => (data += chunk));
+                    res.on("end", () => {
+                        console.log("====================");
+                        console.log(`Posted: ${body}\n`);
+                        console.log(`Response code: ${res.statusCode}\n`);
+                        console.log(`Body: ${data}`);
+                        console.log("====================");
+                    });
+                }
+            );
+            req.write(body);
+            req.end();
+        }
+    }
+}
+
+switch (process.argv[2]) {
+    case "get":
+        get();
+        break;
+    case "post":
+        post();
+        break;
+    default:
+        usage();
+}
